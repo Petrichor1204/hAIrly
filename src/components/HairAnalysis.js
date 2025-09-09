@@ -1,47 +1,80 @@
 import React, { useState, useRef, useCallback } from 'react';
 import Navigation from './Navigation';
-import { Camera, Upload, ArrowRight } from 'lucide-react';
+import { Camera, Upload, ArrowRight, AlertCircle } from 'lucide-react';
+import api from '../api';
+
+// Upload photo and get hair analysis
+export const uploadHairPhoto = async (photoFile) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', photoFile);
+    
+    const response = await api.post('/upload', formData);
+    
+    return {
+      success: true,
+      sessionId: response.data.session_id,
+      analysis: response.data.analysis,
+      message: response.data.message
+    };
+  } catch (error) {
+    console.error('Error uploading photo:', error);
+    return {
+      success: false,
+      error: error.response?.data?.detail || 'Failed to upload photo'
+    };
+  }
+};
 
 const HairAnalysis = ({ 
   currentPage, 
   navigateToPage, 
   handleLogout, 
   capturedImage, 
-  setCapturedImage 
+  setCapturedImage,
+  hairAnalysis,
+  setHairAnalysis,
+  setSessionId
 }) => {
   const [analyzing, setAnalyzing] = useState(false);
+  const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Mock hair analysis results
-  const mockAnalysis = {
-    hairType: "4B Coily",
-    porosity: "Medium",
-    density: "High",
-    condition: "Dry with minor breakage",
-    recommendations: [
-      "Deep conditioning treatments 2x/week",
-      "Protective styling",
-      "Regular trimming every 8-10 weeks",
-      "Gentle detangling when wet"
-    ]
-  };
-
-  const handleImageCapture = useCallback((event) => {
+  const handleImageCapture = useCallback(async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setCapturedImage(e.target.result);
-        setAnalyzing(true);
-        
-        // Simulate AI analysis
-        setTimeout(() => {
-          setAnalyzing(false);
-        }, 3000);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setError(null);
+    setAnalyzing(true);
+
+    // Display image preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCapturedImage(e.target.result);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload to backend using the helper function
+    const result = await uploadHairPhoto(file);
+    
+    if (result.success) {
+      setSessionId(result.sessionId);
+      setHairAnalysis(result.analysis);
+      // Store sessionId for other components to use
+      localStorage.setItem('hairly_session_id', result.sessionId);
+    } else {
+      setError(result.error);
+      setCapturedImage(null); // Clear image on error
     }
-  }, [setCapturedImage]);
+    
+    setAnalyzing(false);
+  }, [setCapturedImage, setSessionId, setHairAnalysis]);
+
+  const handleRetry = () => {
+    setError(null);
+    setCapturedImage(null);
+    setHairAnalysis(null);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
@@ -83,7 +116,8 @@ const HairAnalysis = ({
                 
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-full font-semibold flex items-center gap-2 mx-auto transition-colors"
+                  disabled={analyzing}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-full font-semibold flex items-center gap-2 mx-auto transition-colors disabled:opacity-50"
                 >
                   <Upload className="w-5 h-5" />
                   Choose Photo
@@ -91,45 +125,60 @@ const HairAnalysis = ({
               </div>
             )}
             
-            {analyzing ? (
+            {error ? (
+              <div className="text-center text-red-600 p-4">
+                <AlertCircle className="w-12 h-12 mx-auto mb-2" />
+                <p className="mb-4">{error}</p>
+                <button
+                  onClick={handleRetry}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : analyzing ? (
               <div className="text-center">
                 <div className="animate-spin w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full mx-auto mb-4"></div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">Analyzing Your Hair</h3>
                 <p className="text-gray-600">Our AI is examining your hair type, porosity, and condition...</p>
               </div>
-            ) : capturedImage && (
+            ) : capturedImage && hairAnalysis && (
               <div>
                 <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">Analysis Complete!</h3>
                 
                 <div className="space-y-4 mb-6">
                   <div className="bg-purple-50 p-4 rounded-xl">
                     <h4 className="font-semibold text-purple-800">Hair Type</h4>
-                    <p className="text-purple-600">{mockAnalysis.hairType}</p>
+                    <p className="text-purple-600 capitalize">{hairAnalysis.hair_type}</p>
+                    <p className="text-sm text-purple-500 mt-1">Confidence: {(hairAnalysis.confidence * 100).toFixed(1)}%</p>
                   </div>
                   
                   <div className="bg-blue-50 p-4 rounded-xl">
-                    <h4 className="font-semibold text-blue-800">Porosity</h4>
-                    <p className="text-blue-600">{mockAnalysis.porosity}</p>
-                  </div>
-                  
-                  <div className="bg-green-50 p-4 rounded-xl">
-                    <h4 className="font-semibold text-green-800">Density</h4>
-                    <p className="text-green-600">{mockAnalysis.density}</p>
-                  </div>
-                  
-                  <div className="bg-orange-50 p-4 rounded-xl">
-                    <h4 className="font-semibold text-orange-800">Condition</h4>
-                    <p className="text-orange-600">{mockAnalysis.condition}</p>
+                    <h4 className="font-semibold text-blue-800">Characteristics</h4>
+                    <ul className="mt-2 space-y-1">
+                      {hairAnalysis.characteristics.map((char, idx) => (
+                        <li key={idx} className="text-blue-600 text-sm">• {char}</li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
                 
-                <button
-                  onClick={() => navigateToPage('plan')}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
-                >
-                  Get My Custom Plan
-                  <ArrowRight className="w-5 h-5" />
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => navigateToPage('plan')}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    Get My Custom Plan
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                  
+                  <button
+                    onClick={handleRetry}
+                    className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded-xl font-medium transition-colors"
+                  >
+                    Analyze Another Photo
+                  </button>
+                </div>
               </div>
             )}
           </div>

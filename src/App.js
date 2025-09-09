@@ -15,6 +15,11 @@ const App = () => {
   const [journalEntries, setJournalEntries] = useState([]);
   const [activeReminders, setActiveReminders] = useState([]);
   const [backendStatus, setBackendStatus] = useState('unknown');
+  // API response states
+  const [hairAnalysis, setHairAnalysis] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [carePlan, setCarePlan] = useState(null);
+  const [progressHistory, setProgressHistory] = useState([]);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -41,14 +46,23 @@ const App = () => {
     journalEntries,
     setJournalEntries,
     activeReminders,
-    setActiveReminders
+    setActiveReminders,
+    // API state
+    hairAnalysis,
+    setHairAnalysis,
+    sessionId,
+    setSessionId,
+    carePlan,
+    setCarePlan,
+    progressHistory,
+    setProgressHistory
   };
 
   useEffect(() => {
     let mounted = true;
-    api.get('/api/hello')
+    api.get('/')  // FastAPI root endpoint
       .then(res => {
-        if (mounted) setBackendStatus('online: ' + (res.data?.msg ?? 'ok'));
+        if (mounted) setBackendStatus('online: ' + (res.data?.message ?? 'ok'));
       })
       .catch(() => {
         if (mounted) setBackendStatus('offline');
